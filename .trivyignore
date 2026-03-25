@@ -1,0 +1,2 @@
+# devcontainerは開発用コンテナなのでhealthcheck不要
+DS-0026

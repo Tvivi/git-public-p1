@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+
+# Virtual env
+.venv/
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Coverage
+/coverage
+.coverage
+/artifacts
+
+# Environment / secrets
+.env
+.secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Editor / OS
+.DS_Store

@@ -1,0 +1,302 @@
+[project]
+name = "calc-app"
+version = "0.1.0"
+description = "Simple arithmetic app for pytest and GitHub Actions practice"
+readme = "README.md"
+requires-python = "==3.12.0"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "coverage>=7.10.6",
+    "detect-secrets==1.5.0",
+    "mypy>=1.19.1",
+    "pip-audit>=2.10.0",
+    "pip-licenses>=5.5.1",
+    "poethepoet>=0.42.1",
+    "pytest>=9.0.2",
+    "pytest-bdd>=8.1.0",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.15.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.ruff]
+src = ["src"]
+include = ["*.py"]
+extend-exclude = [
+    # Ruffのデフォルトに+自分で追加した除外設定
+    "artifacts/**",
+    "coverage/**",
+    "htmlcov/**",
+    "scripts/**",
+    "tests/scripts/**",
+]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    # -----------------------------
+    # 基本Lint / 構文 / フォーマット
+    # -----------------------------
+    "E", # pycodestyle (PEP 8)
+    "W", # pycodestyle (非厳密または軽微なPEP 8違反)
+    "F", # Pyflakes
+    "I", # isort
+    "N", # pep8-naming
+
+    # -----------------------------
+    # バグ検出 / 実行時エラー防止
+    # -----------------------------
+    "B",   # flake8-bugbear (Pythonの罠っぽい挙動を防ぐ)
+    "PLE", # Pylint Error (構文エラーではないものの、実行時にエラーになる可能性が高い、あるいは明らかに間違っているコードを検出)
+    "RUF", # Ruff-specific (Ruff開発チームによる、他のツールでは拾えないルール集)
+    "PGH", # pygrep-hooks (広すぎる# type: ignoreや# noqaの使用を禁止し、モックオブジェクトの不適切な使用を防ぐ)
+
+    # -----------------------------
+    # 可読性 / Pythonic改善 / リファクタ
+    # -----------------------------
+    "UP",   # pyupgrade (古い構文をモダンな書き方に自動修正)
+    "SIM",  # flake8-simplify (コードをよりシンプルでPythonicな書き方に自動修正)
+    "FURB", # refurb (コードを現代的で洗練された書き方にするルール集)
+    "PLR",  # Pylint Refactor (コードの複雑性や構造に関するルール)
+    "C90",  # mccabe (循環的複雑度を計測し、複雑すぎる関数（分岐やループが多すぎる関数）を警告)
+    "RET",  # flake8-return (関数のreturnに関するスタイルを統一)
+    "C4",   # flake8-comprehensions (リスト内包表記や辞書内包表記の正しい使い方を指南)
+
+    # -----------------------------
+    # import / パッケージ構造
+    # -----------------------------
+    "ICN", # flake8-import-conventions (import numpy as np のような、デファクトスタンダードなエイリアス（別名）の使用を強制)
+    "TID", # flake8-tidy-imports (インポートのスタイルを制御。モジュール間の依存関係を整理する)
+    "INP", # flake8-no-pep420 (__init__.pyが存在しないパッケージを禁止)
+    "ISC", # flake8-implicit-str-concat (文字列リテラルが暗黙的に結合されること（"foo" "bar" が "foobar" になる挙動）を検出)
+    "TC",  # flake8-type-checking (型ヒントのためだけにインポートしているモジュールを、TYPE_CHECKING:ブロック内に移動することを促す)
+
+    # -----------------------------
+    # セキュリティ / 安全性
+    # -----------------------------
+    "S",   # flake8-bandit (セキュリティに関する脆弱性を検出)
+    "A",   # flake8-builtins (Pythonの組み込み関数（id, list, minなど）と同じ名前の変数を定義してしまうシャドーイングを防ぐ)
+    "BLE", # flake8-blind-except (except Exception:のように、すべての例外をキャッチする広すぎる例外処理を禁止)
+    "RSE", # flake8-raise (raise文の書き方を統一)
+    "EM",  # flake8-errmsg (Exceptionやそのサブクラスのインスタンス化時に渡されるエラーメッセージの書き方を統一)
+    "TRY", # tryceratops (例外処理を雑に書くのを防ぐ)
+
+    # -----------------------------
+    # 設計 / アンチパターン検出
+    # -----------------------------
+    "SLF", # flake8-self (クラスの外部から、_で始まるプライベートなメンバ（属性やメソッド）にアクセスすることを禁止)
+    "FBT", # flake8-boolean-trap (関数の引数にTrueやFalseを渡す「ブールトラップ」を警告)
+    "ARG", # flake8-unused-arguments (定義されているが使われていない引数を検出)
+
+    # -----------------------------
+    # パフォーマンス / モダンAPI
+    # -----------------------------
+    "PTH",  # flake8-use-pathlib (os.pathモジュールの代わりに、モダンで扱いやすいpathlibを使うことを促す)
+    "PERF", # Perflint (主にループやリストなどでパフォーマンスに悪影響を与える書き方を検出)
+
+    # -----------------------------
+    # 型 / 型ヒント補助
+    # -----------------------------
+    "PYI", # flake8-pyi (TypeVarやTypedDictなどの型の正しい使い方を促す)
+
+    # -----------------------------
+    # デバッグ / 開発補助
+    # -----------------------------
+    "T10", # flake8-debugger (pdbなどのデバッグ用のコードの残存を防ぐ)
+    "FIX", # flake8-fixme (コード内のFIXME, TODO, HACKなどのコメントを検出)
+    "TD",  # flake8-todos (「誰がいつ書いたのか」「Issue番号はあるか」などのTODOコメントの書き方を強制)
+
+    # -----------------------------
+    # テスト
+    # -----------------------------
+    "PT", # flake8-pytest-style
+
+    # -----------------------------
+    # 特定用途（今は未使用）
+    # -----------------------------
+    # "LOG",   # flake8-logging (Python標準のloggingモジュールの設定ミスや不適切な使い方を検出)
+    # "DTZ",   # flake8-datetimez
+    # "ASYNC", # flake8-async (asyncioを使った非同期コードにおけるブロッキング処理などの落とし穴を検出)
+    # "FAST",  # FastAPI (FastAPI特有の書き方をチェック)
+    # "DJ",    # flake8-django (Djangoフレームワークのためのルールセット)
+    # "NPY",   # NumPy-specific rules
+    # "PD)",   # pandas-vet
+]
+ignore = [
+    "S101",   # assert を許容
+    "TD003",  # TODOにissueリンク必須を緩和
+    "FIX002", # TODOコメント自体は禁止しない
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "PLR2004", # テストは可読性優先してマジックナンバーを許容する
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.12"
+# import解決時の検索パス（src配下をパッケージとして扱う）
+mypy_path = "src"
+# 型チェック対象ファイル（CIでの対象範囲）
+files = ["src", "tests"]
+# 除外パターン（正規表現）
+exclude = ["^tests/scripts/"]
+# -----------------------------
+# 厳格モード（重要）
+# -----------------------------
+# 以下の複数オプションを一括で有効化する
+strict = true
+# 含まれる主な設定:
+# - disallow_untyped_defs = true
+# - disallow_incomplete_defs = true
+# - check_untyped_defs = true
+# - disallow_untyped_calls = true
+# - disallow_any_generics = true
+# - warn_return_any = true
+# - no_implicit_optional = true
+# - warn_unused_ignores = true
+# - warn_redundant_casts = true
+# - strict_equality = true
+
+# -----------------------------
+# 個別設定
+# -----------------------------
+# 型ヒントがない外部ライブラリのimportエラーを無視（型スタブがない場合でもエラーにしない） → サードパーティ利用時のノイズ削減
+# 慣れてきたら false にして自分で型を用意すると予期せぬエラーを抑止できる
+ignore_missing_imports = true
+# Any型を返す関数に警告 → 型安全性の低下を検知
+warn_return_any = true
+# Anyの使用をさらに制限
+disallow_any_generics = true
+# 未使用の設定があれば警告 → typoや無効設定の検出
+warn_unused_configs = true
+# 型注釈なし関数の定義を禁止
+disallow_untyped_defs = true
+# 型ヒントなしの呼び出しを禁止
+disallow_untyped_calls = true
+# 型未指定関数の内部もチェック → 型なしコードの安全性も担保
+check_untyped_defs = true
+# Optionalの暗黙的解釈を禁止 → None許容を明示的にする（バグ防止）
+no_implicit_optional = true
+# 冗長キャスト検出
+warn_redundant_casts = true
+# 到達不能コード検出
+warn_unreachable = true
+# エラーコードを表示（ignore指定などに使う）
+show_error_codes = true
+# エラーメッセージを整形して見やすく表示
+pretty = true
+cache_dir = ".mypy_cache"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "scripts"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=xml:coverage/coverage.xml",
+    "--cov-report=html:coverage/html",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 0
+omit = ["tests/*"]
+
+exclude_also = ["if __name__ == .__main__.:", "raise NotImplementedError"]
+
+[tool.poe.tasks]
+lint = "uv run ruff check ."
+lint-preview = "uv run ruff check . --fix --diff"
+lint-fix = "uv run ruff check . --fix"
+
+format = "uv run ruff format ."               # save時に自動で実行されるはず
+format-check = "uv run ruff format . --check"
+
+typecheck = "uv run mypy"
+test = "uv run pytest"
+
+check = ["lint", "format-check", "test"] # typecheck は重たいのでCIに任せる
+fix = ["lint-fix", "format"]
+
+trivy-config-summary = "uv run python scripts/security/trivy_summary.py --scan-type config --input artifacts/repo/trivy-config.json --summary-file artifacts/repo/trivy-config-summary.md --scan-exit-code 0"
+trivy-fs-summary = "uv run python scripts/security/trivy_summary.py --scan-type fs --input artifacts/repo/trivy-fs.json --summary-file artifacts/repo/trivy-fs-summary.md --scan-exit-code 0"
+trivy-config-report = "trivy config --format json -o artifacts/repo/trivy-config.json ."
+trivy-fs-report = "trivy fs --format json -o artifacts/repo/trivy-fs.json ."
+
+# NOTE: 事前に mkdir -p artifacts/repo は実行しておくこと
+# 初回コミット時に実行するとDockerファイルなどの不備が事前に判明して最適な環境で始められる
+trivy-init = [
+    "trivy-config-report",
+    "trivy-fs-report",
+    "trivy-config-summary",
+    "trivy-fs-summary",
+]
+# [tool.poe.tasks]終了
+
+# Note: 以降は | がコマンドとして認識してもらえなかったので、[..tasks.xx]という書き方で統一している
+
+# Git管理ファイルだけで baseline を作る
+# 初回コミット、誤検出を正式に追加許可したい、detect-secrets のルールや運用方針を見直した場合などに使う
+# ただし、resetなので、下記auditの結果は全て消失する。再度レビューが必要だが、git履歴を見て既存の判断は踏襲すれば良い
+[tool.poe.tasks.secrets-baseline-reset]
+help = "Git管理ファイルだけで .secrets.baseline を再作成"
+shell = "git ls-files -z | xargs -0 uv run detect-secrets scan > .secrets.baseline"
+# baselineを人間がレビューし、場合によっては(dummyなど)許容させる
+[tool.poe.tasks.secrets-audit]
+help = "baseline を人手レビューする"
+cmd = "uv run detect-secrets audit .secrets.baseline"
+# 初回からずっと実施、CIと同じ条件でbaselineからの差分チェックする
+[tool.poe.tasks.secrets-check]
+help = "baseline との差分だけを検査する"
+shell = "git ls-files -z | xargs -0 uv run detect-secrets-hook --baseline .secrets.baseline"
+
+# 初回コミット時に実行
+# Note: baseline作成はファイル変更を全て完了してから実施しないと、後からの変更が反映されないので注意
+[tool.poe.tasks.secrets-init]
+help = "baseline を再作成して audit まで連続実行"
+sequence = ["secrets-baseline-reset", "secrets-audit"]
+
+# stagedファイルを対象にしたローカル差分チェック。detect-secrets と別エンジンでダブルチェックとして使う
+[tool.poe.tasks.gitleaks-staged]
+cmd = "gitleaks protect --staged --verbose --config .gitleaks.toml"
+# repo 全体(working tree)チェック。用意したけど使い道なし
+[tool.poe.tasks.gitleaks-repo]
+cmd = "gitleaks dir . --verbose --config .gitleaks.toml"
+# 過去 commit に残ったGit履歴全体をチェック(CIと同じ)。公開前・定期監査をローカルで実施したい時とか
+# --redact オプションで出力結果内部でsecret をマスクさせることができる
+[tool.poe.tasks.gitleaks-history]
+cmd = "gitleaks git --verbose --redact --config .gitleaks.toml"
+
+# 機密情報流出阻止のためにローカルで最低限毎回実施する
+[tool.poe.tasks.min-git-scan]
+sequence = ["secrets-check", "gitleaks-staged"]

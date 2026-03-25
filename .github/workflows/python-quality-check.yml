@@ -1,0 +1,345 @@
+name: python-quality-check
+
+on:
+  # 常にCIを実施する
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# 同一キー競合対策(push と pull_request の両方で毎回同じコミットで走る)
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Load tool versions
+        run: |
+          set -a
+          source tool-versions.env
+          set +a
+          {
+            echo "UV_VERSION=$UV_VERSION"
+            echo "PYTHON_VERSION=$PYTHON_VERSION"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Setup Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Initialize artifact directories
+        run: |
+          mkdir -p artifacts/ruff artifacts/mypy artifacts/pytest
+
+      - name: Ruff lint
+        run: |
+          set +e
+          uv run ruff check . --output-format=github \
+            > artifacts/ruff/ruff-lint.md 2>&1
+          EXIT_CODE=$?
+          set -e
+
+          ISSUE_COUNT=$(grep -E -c "^[^ ]+:[0-9]+:[0-9]+:" artifacts/ruff/ruff-lint.md || true)
+
+          {
+            echo "RUFF_LINT_EXIT_CODE=$EXIT_CODE"
+            echo "RUFF_LINT_ISSUE_COUNT=$ISSUE_COUNT"
+          } >> "$GITHUB_ENV"
+
+      - name: Ruff fix suggestion
+        if: always()
+        run: |
+          if [ "${RUFF_LINT_EXIT_CODE:-1}" != "0" ]; then
+            uv run ruff check . --fix --diff \
+              > artifacts/ruff/ruff-fix-suggestion.diff 2>&1 || true
+          else
+            : > artifacts/ruff/ruff-fix-suggestion.diff
+          fi
+
+      - name: Ruff format check
+        run: |
+          set +e
+          uv run ruff format . --check \
+            > artifacts/ruff/ruff-format.md 2>&1
+          EXIT_CODE=$?
+          set -e
+
+          {
+            echo "RUFF_FORMAT_EXIT_CODE=$EXIT_CODE"
+          } >> "$GITHUB_ENV"
+
+      - name: Mypy type check
+        run: |
+          set +e
+          uv run mypy > artifacts/mypy/mypy.md 2>&1
+          EXIT_CODE=$?
+          set -e
+
+          ERROR_COUNT=$(grep -c "error:" artifacts/mypy/mypy.md || true)
+
+          {
+            echo "MYPY_EXIT_CODE=$EXIT_CODE"
+            echo "MYPY_ERROR_COUNT=$ERROR_COUNT"
+          } >> "$GITHUB_ENV"
+
+      - name: Pytest with coverage
+        run: |
+          set +e
+          uv run pytest
+          EXIT_CODE=$?
+          set -e
+
+          echo "PYTEST_EXIT_CODE=$EXIT_CODE" >> $GITHUB_ENV
+
+      - name: Unified quality summary
+        if: always()
+        run: |
+          ruff_lint_status="Success"
+          ruff_format_status="Success"
+          mypy_status="Success"
+          pytest_status="Success"
+
+          [ "${RUFF_LINT_EXIT_CODE:-1}" -ne 0 ] && ruff_lint_status="Failure"
+          [ "${RUFF_FORMAT_EXIT_CODE:-1}" -ne 0 ] && ruff_format_status="Failure"
+          [ "${MYPY_EXIT_CODE:-1}" -ne 0 ] && mypy_status="Failure"
+          [ "${PYTEST_EXIT_CODE:-1}" -ne 0 ] && pytest_status="Failure"
+
+          {
+            echo "## Quality Check Summary"
+            echo
+            echo "| Tool | Status | Count | Report | Notes |"
+            echo "|------|--------|-------|--------|-------|"
+            echo "| Ruff lint | ${ruff_lint_status} | ${RUFF_LINT_ISSUE_COUNT:-0} | artifacts/ruff/ruff-lint.md | Auto-fix diff -> artifacts/ruff/ruff-fix-suggestion.diff |"
+            echo "| Ruff format | ${ruff_format_status} | - | artifacts/ruff/ruff-format.md | Formatter check only |"
+            echo "| Mypy | ${mypy_status} | ${MYPY_ERROR_COUNT:-0} | artifacts/mypy/mypy.md | Strict type check |"
+            echo "| Pytest | ${pytest_status} | - | - | Coverageで確認 |"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Failure hints
+        if: always()
+        run: |
+          HINT_WRITTEN=0
+
+          {
+            echo "## Failure Hints"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${RUFF_LINT_EXIT_CODE:-1}" != "0" ]; then
+            HINT_WRITTEN=1
+            {
+              echo "### Ruff lint"
+              echo
+              echo "- ローカル確認: \`uv run ruff check .\`"
+              echo "- 自動修正: \`uv run ruff check . --fix\`"
+              echo "- 提案差分: \`artifacts/ruff/ruff-fix-suggestion.diff\`"
+              echo
+              echo '```text'
+              tail -n 40 artifacts/ruff/ruff-lint.md
+              echo '```'
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "${RUFF_FORMAT_EXIT_CODE:-1}" != "0" ]; then
+            HINT_WRITTEN=1
+            {
+              echo "### Ruff format"
+              echo
+              echo "- ローカル確認: \`uv run ruff format . --check\`"
+              echo "- 自動整形: \`uv run ruff format .\`"
+              echo
+              echo '```text'
+              tail -n 40 artifacts/ruff/ruff-format.md
+              echo '```'
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "${MYPY_EXIT_CODE:-1}" != "0" ]; then
+            HINT_WRITTEN=1
+            {
+              echo "### Mypy"
+              echo
+              echo "- ローカル確認: \`uv run mypy\`"
+              echo "- 型エラー詳細は \`artifacts/mypy/mypy.md\` を参照"
+              echo
+              echo '```text'
+              tail -n 40 artifacts/mypy/mypy.md
+              echo '```'
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "${PYTEST_EXIT_CODE:-1}" != "0" ]; then
+            HINT_WRITTEN=1
+            {
+              echo "### Pytest"
+              echo
+              echo "- ローカル確認: \`uv run pytest -vv\`"
+              echo
+              echo '```text'
+              uv run pytest -vv 2>&1 | tail -n 60 || true
+              echo '```'
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "$HINT_WRITTEN" -eq 0 ]; then
+            echo "No Failure so No Hints" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "## Coverage Report"
+            echo
+            echo '```text'
+            uv run coverage report || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build PR comment body
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          ruff_lint_status="Success"
+          ruff_format_status="Success"
+          mypy_status="Success"
+          pytest_status="Success"
+
+          [ "${RUFF_LINT_EXIT_CODE:-1}" -ne 0 ] && ruff_lint_status="Failure"
+          [ "${RUFF_FORMAT_EXIT_CODE:-1}" -ne 0 ] && ruff_format_status="Failure"
+          [ "${MYPY_EXIT_CODE:-1}" -ne 0 ] && mypy_status="Failure"
+          [ "${PYTEST_EXIT_CODE:-1}" -ne 0 ] && pytest_status="Failure"
+
+          {
+            echo "## CI Quality Report"
+            echo
+            echo "| Tool | Status | Count |"
+            echo "|------|--------|-------|"
+            echo "| Ruff lint | ${ruff_lint_status} | ${RUFF_LINT_ISSUE_COUNT:-0} |"
+            echo "| Ruff format | ${ruff_format_status} | - |"
+            echo "| Mypy | ${mypy_status} | ${MYPY_ERROR_COUNT:-0} |"
+            echo "| Pytest | ${pytest_status} | - |"
+            echo
+            echo "### Coverage"
+            echo
+            echo '```text'
+            uv run coverage report || true
+            echo '```'
+            echo
+            echo "<details>"
+            echo "<summary>Failure hints</summary>"
+            echo
+            if [ "${RUFF_LINT_EXIT_CODE:-1}" != "0" ]; then
+              echo "#### Ruff lint"
+              echo
+              echo '```text'
+              tail -n 30 artifacts/ruff/ruff-lint.md
+              echo '```'
+              echo
+            fi
+
+            if [ "${RUFF_FORMAT_EXIT_CODE:-1}" != "0" ]; then
+              echo "#### Ruff format"
+              echo
+              echo '```text'
+              tail -n 30 artifacts/ruff/ruff-format.md
+              echo '```'
+              echo
+            fi
+
+            if [ "${MYPY_EXIT_CODE:-1}" != "0" ]; then
+              echo "#### Mypy"
+              echo
+              echo '```text'
+              tail -n 30 artifacts/mypy/mypy.md
+              echo '```'
+              echo
+            fi
+
+            if [ "${PYTEST_EXIT_CODE:-1}" != "0" ]; then
+              echo "#### Pytest"
+              echo
+              echo '```text'
+              uv run pytest -vv 2>&1 | tail -n 40 || true
+              echo '```'
+              echo
+            fi
+
+            echo "</details>"
+          } > artifacts/ci/pr-comment.md
+
+      - name: Post sticky PR comment
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: ci-quality-report
+          path: artifacts/ci/pr-comment.md
+
+      - name: Upload Ruff reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ruff-reports
+          path: artifacts/ruff
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload mypy report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: mypy-report
+          path: artifacts/mypy/mypy.md
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload coverage html
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-html
+          path: coverage/html
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload coverage xml
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-xml
+          path: coverage/coverage.xml
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Final CI status
+        if: always()
+        run: |
+          EXIT_CODE=0
+
+          [ "${RUFF_LINT_EXIT_CODE:-0}" -ne 0 ] && EXIT_CODE=1
+          [ "${RUFF_FORMAT_EXIT_CODE:-0}" -ne 0 ] && EXIT_CODE=1
+          [ "${MYPY_EXIT_CODE:-0}" -ne 0 ] && EXIT_CODE=1
+          [ "${PYTEST_EXIT_CODE:-0}" -ne 0 ] && EXIT_CODE=1
+
+          exit "$EXIT_CODE"

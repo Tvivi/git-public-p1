@@ -1,0 +1,370 @@
+name: security-check
+
+on:
+  # 常にCIを実施する
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  repo-security:
+    name: Repository security checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Windows 改行の \r がファイル末尾に残っていることへの対策も入れてある
+      - name: Load tool versions
+        shell: bash
+        run: |
+          sed -i 's/\r$//' tool-versions.env
+          set -a
+          source tool-versions.env
+          set +a
+
+          for key in UV_VERSION TRIVY_VERSION GITLEAKS_VERSION DETECT_SECRETS_VERSION PYTHON_VERSION; do
+            value="$(printenv "$key" | tr -d '\r\n')"
+            echo "${key}=${value}" >> "$GITHUB_ENV"
+          done
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python
+        shell: bash
+        run: uv python install "${{ env.PYTHON_VERSION }}"
+
+      - name: Install project all packages
+        shell: bash
+        run: uv sync
+
+      - name: Install detect-secrets
+        shell: bash
+        run: uv tool install "detect-secrets==${{ env.DETECT_SECRETS_VERSION }}"
+
+      - name: Install Gitleaks
+        shell: bash
+        run: |
+          version="${{ env.GITLEAKS_VERSION }}"
+          tmpdir="$(mktemp -d)"
+
+          curl -sSL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
+            -o "${tmpdir}/gitleaks.tar.gz"
+
+          tar -xzf "${tmpdir}/gitleaks.tar.gz" -C "${tmpdir}"
+          sudo mv "${tmpdir}/gitleaks" /usr/local/bin/gitleaks
+          gitleaks version
+
+          rm -rf "${tmpdir}"
+
+      - name: Install Trivy
+        shell: bash
+        run: |
+          version="${{ env.TRIVY_VERSION }}"
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | \
+            sh -s -- -b ./bin "v${version}"
+          sudo mv ./bin/trivy /usr/local/bin/trivy
+          trivy --version
+
+      # Install Gitleaks で tar を repo 直下に展開してGitleaks 同梱の README LICENSE gitleaks.tar.gzに上書きされることがあったのでその対策
+      - name: Verify workspace is clean before scanning
+        shell: bash
+        run: |
+          git status --short
+          test -z "$(git status --porcelain)"
+
+      - name: Prepare artifact directories
+        shell: bash
+        run: |
+          mkdir -p artifacts/repo
+          mkdir -p artifacts/site
+
+      - name: Run detect-secrets working-tree scan
+        id: detect_secrets_scan
+        shell: bash
+        run: |
+          set +e
+          git ls-files -z | xargs -0 detect-secrets scan > artifacts/repo/detect-secrets.json
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Run detect-secrets baseline policy
+        id: detect_secrets_hook
+        shell: bash
+        run: |
+          set +e
+          git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline \
+            > artifacts/repo/detect-secrets-hook.txt 2>&1
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Build detect-secrets summary
+        id: detect_secrets
+        shell: bash
+        run: |
+          uv run python scripts/security/detect_secrets_summary.py \
+            --report artifacts/repo/detect-secrets.json \
+            --hook-output artifacts/repo/detect-secrets-hook.txt \
+            --summary-file artifacts/repo/detect-secrets-summary.md \
+            --scan-exit-code "${{ steps.detect_secrets_scan.outputs.exit_code }}" \
+            --hook-exit-code "${{ steps.detect_secrets_hook.outputs.exit_code }}"
+
+      - name: Run Gitleaks
+        id: gitleaks_scan
+        shell: bash
+        run: |
+          set +e
+          gitleaks git \
+            --redact \
+            --config .gitleaks.toml \
+            --report-format json \
+            --report-path artifacts/repo/gitleaks.json \
+            .
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Build Gitleaks summary
+        id: gitleaks
+        shell: bash
+        run: |
+          uv run python scripts/security/gitleaks_summary.py \
+            --input artifacts/repo/gitleaks.json \
+            --summary-file artifacts/repo/gitleaks-summary.md \
+            --scan-exit-code "${{ steps.gitleaks_scan.outputs.exit_code }}"
+
+      # 後述の依存検査では検出しにくい Dockerfile / GitHub Actions / IaC などの設定不備、ポリシー違反の検査
+      - name: Run Trivy config
+        id: trivy_config_scan
+        shell: bash
+        run: |
+          set +e
+          trivy config \
+            --format json \
+            -o artifacts/repo/trivy-config.json \
+            .
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Build Trivy config summary
+        id: trivy_config
+        shell: bash
+        run: |
+          uv run python scripts/security/trivy_summary.py \
+            --scan-type config \
+            --input artifacts/repo/trivy-config.json \
+            --summary-file artifacts/repo/trivy-config-summary.md \
+            --scan-exit-code "${{ steps.trivy_config_scan.outputs.exit_code }}"
+
+      # リポジトリ全体の依存関係の脆弱性、設定ミスによるリスク、漏洩の可能性がある秘密情報系の横断スキャン
+      - name: Run Trivy fs
+        id: trivy_fs_scan
+        shell: bash
+        run: |
+          set +e
+          trivy fs \
+            --format json \
+            -o artifacts/repo/trivy-fs.json \
+            .
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Build Trivy fs summary
+        id: trivy_fs
+        shell: bash
+        run: |
+          uv run python scripts/security/trivy_summary.py \
+            --scan-type fs \
+            --input artifacts/repo/trivy-fs.json \
+            --summary-file artifacts/repo/trivy-fs-summary.md \
+            --scan-exit-code "${{ steps.trivy_fs_scan.outputs.exit_code }}"
+
+      - name: Build report index for Pages-ready artifact
+        if: always()
+        shell: bash
+        run: |
+          uv run python scripts/security/build_security_report_index.py \
+            --output artifacts/site/index.md \
+            --detect-secrets-summary artifacts/repo/detect-secrets-summary.md \
+            --gitleaks-summary artifacts/repo/gitleaks-summary.md \
+            --trivy-config-summary artifacts/repo/trivy-config-summary.md \
+            --trivy-fs-summary artifacts/repo/trivy-fs-summary.md
+
+      - name: Write repository security summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Repository security checks"
+            echo
+            echo "| Check | Result | Hint |"
+            echo "|---|---|---|"
+            echo "| detect-secrets baseline policy | ${{ steps.detect_secrets.outputs.policy_exit_code == '0' && 'success' || 'failure' }} | ${{ steps.detect_secrets.outputs.summary_hint }} |"
+            echo "| Gitleaks policy | ${{ steps.gitleaks.outputs.policy_exit_code == '0' && 'success' || 'failure' }} | ${{ steps.gitleaks.outputs.summary_hint }} |"
+            echo "| Trivy config policy (HIGH/CRITICAL) | ${{ steps.trivy_config.outputs.policy_exit_code == '0' && 'success' || 'failure' }} | ${{ steps.trivy_config.outputs.summary_hint }} |"
+            echo "| Trivy fs policy (HIGH/CRITICAL) | ${{ steps.trivy_fs.outputs.policy_exit_code == '0' && 'success' || 'failure' }} | ${{ steps.trivy_fs.outputs.summary_hint }} |"
+            echo
+            cat artifacts/repo/detect-secrets-summary.md
+            echo
+            cat artifacts/repo/gitleaks-summary.md
+            echo
+            cat artifacts/repo/trivy-config-summary.md
+            echo
+            cat artifacts/repo/trivy-fs-summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment security summary on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const marker = '<!-- repo-security-comment -->'
+            const runUrl =
+              `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+
+            const rows = [
+              {
+                name: 'detect-secrets baseline policy',
+                result: '${{ steps.detect_secrets.outputs.policy_exit_code }}' === '0' ? 'success' : 'failure',
+                hint: `${{ steps.detect_secrets.outputs.summary_hint }}`,
+              },
+              {
+                name: 'Gitleaks policy',
+                result: '${{ steps.gitleaks.outputs.policy_exit_code }}' === '0' ? 'success' : 'failure',
+                hint: `${{ steps.gitleaks.outputs.summary_hint }}`,
+              },
+              {
+                name: 'Trivy config policy (HIGH/CRITICAL)',
+                result: '${{ steps.trivy_config.outputs.policy_exit_code }}' === '0' ? 'success' : 'failure',
+                hint: `${{ steps.trivy_config.outputs.summary_hint }}`,
+              },
+              {
+                name: 'Trivy fs policy (HIGH/CRITICAL)',
+                result: '${{ steps.trivy_fs.outputs.policy_exit_code }}' === '0' ? 'success' : 'failure',
+                hint: `${{ steps.trivy_fs.outputs.summary_hint }}`,
+              },
+            ]
+
+            const table = [
+              '| Check | Result | Hint |',
+              '|---|---|---|',
+              ...rows.map((row) => `| ${row.name} | ${row.result} | ${row.hint} |`),
+            ].join('\n')
+
+            const body = `${marker}
+            ## Repository security checks
+
+            ${table}
+
+            詳細: ${runUrl}
+            `
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              per_page: 100,
+            })
+
+            const existing = comments.find(
+              (comment) =>
+                comment.user?.type === 'Bot' &&
+                comment.body?.includes(marker),
+            )
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              })
+            }
+
+      - name: Fail if detect-secrets scan errored
+        if: steps.detect_secrets.outputs.scan_status != 'ok'
+        shell: bash
+        run: |
+          echo "detect-secrets scan failed to run."
+          exit 1
+
+      - name: Fail if detect-secrets found new secrets
+        if: steps.detect_secrets.outputs.policy_exit_code != '0'
+        shell: bash
+        run: |
+          echo "detect-secrets found potential new secrets."
+          exit 1
+
+      - name: Fail if Gitleaks scan errored
+        if: steps.gitleaks.outputs.scan_status != 'ok'
+        shell: bash
+        run: |
+          echo "Gitleaks scan failed to run."
+          exit 1
+
+      - name: Fail if Gitleaks found leaks
+        if: steps.gitleaks.outputs.policy_exit_code != '0'
+        shell: bash
+        run: |
+          echo "Gitleaks detected potential leaks."
+          exit 1
+
+      - name: Fail if Trivy config scan errored
+        if: steps.trivy_config.outputs.scan_status != 'ok'
+        shell: bash
+        run: |
+          echo "Trivy config scan failed to run."
+          exit 1
+
+      - name: Fail if Trivy config found HIGH/CRITICAL issues
+        if: steps.trivy_config.outputs.policy_exit_code != '0'
+        shell: bash
+        run: |
+          echo "Trivy config found HIGH/CRITICAL issues."
+          exit 1
+
+      - name: Fail if Trivy fs scan errored
+        if: steps.trivy_fs.outputs.scan_status != 'ok'
+        shell: bash
+        run: |
+          echo "Trivy fs scan failed to run."
+          exit 1
+
+      - name: Fail if Trivy fs found HIGH/CRITICAL issues
+        if: steps.trivy_fs.outputs.policy_exit_code != '0'
+        shell: bash
+        run: |
+          echo "Trivy fs found HIGH/CRITICAL issues."
+          exit 1
+
+      - name: Upload repository security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-repo
+          path: |
+            artifacts/repo/
+            artifacts/site/

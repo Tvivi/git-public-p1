@@ -1,0 +1,22 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        # .envから注入される。env_fileはコンテナ起動時の環境変数であって、build 時の変数展開元にならない
+        # tool-versions.envはCI用にgit commit して良い
+        UV_VERSION: ${UV_VERSION}
+        TRIVY_VERSION: ${TRIVY_VERSION}
+        GITLEAKS_VERSION: ${GITLEAKS_VERSION}
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:cached
+    # 配列形式にして sleep infinity を確実に動かす
+    command: ["/bin/sh", "-c", "while true; do sleep 1000; done"]
+    # VSCode terminal操作を有効にする(=キーボード操作)
+    stdin_open: true
+    # 仮想ターミナルを有効にする(=docker exec -it)
+    tty: true
+    # ゾンビプロセス防止
+    init: true

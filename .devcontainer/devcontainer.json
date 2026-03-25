@@ -1,0 +1,27 @@
+{
+    "name": "python-uv-devcontainer",
+    "dockerComposeFile": "../docker-compose.yml",
+    "service": "dev",
+    "workspaceFolder": "/workspace",
+    "remoteUser": "vscode",
+    "updateRemoteUserUID": true,
+    "shutdownAction": "stopCompose",
+    "containerEnv": {
+        "NPM_CONFIG_PREFIX": "/home/vscode/.npm-global"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.debugpy",
+                "ms-python.black-formatter",
+                "charliermarsh.ruff",
+                "github.vscode-github-actions",
+                "tamasfe.even-better-toml",
+                "EditorConfig.EditorConfig"
+            ]
+        }
+    },
+    "postCreateCommand": "bash .devcontainer/postCreate.sh",
+    "postStartCommand": "bash .devcontainer/postStart.sh"
+}

@@ -1,0 +1,36 @@
+title = "Repository Gitleaks min config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Project-wide allowlist for known false positives"
+
+# .env.example のような誤検知しやすい場所だけを軽く除外。ほとんどは .gitignore で無視しているはず
+paths = [
+    '''(^|/)docs?/''',
+    '''(^|/)artifacts/''',
+    '''(^|/)coverage/''',
+    '''(^|/)htmlcov/''',
+    '''(^|/)\.venv/''',
+    '''(^|/)node_modules/''',
+    '''(^|/)dist/''',
+    '''(^|/)build/''',
+    '''(^|/)\.mypy_cache/''',
+    '''(^|/)\.pytest_cache/''',
+    '''(^|/)site/''',
+    '''(^|/)mkdocs\.yml$''',
+    '''(^|/)\.env\.example$''',
+    '''(^|/)\.env\.sample$''',
+]
+
+# 文字列 allow は dummy, example, sample など最小限だけ
+regexes = [
+    '''(?i)dummy''',
+    '''(?i)example''',
+    '''(?i)sample''',
+    '''(?i)test[-_ ]?(key|token|secret|password)''',
+    '''(?i)fake[-_ ]?(key|token|secret|password)''',
+]
+
+commits = []

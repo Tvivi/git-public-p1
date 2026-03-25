@@ -1,0 +1,257 @@
+name: python_licenses-check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  python-deps-prod:
+    name: Python dependency checks (production only)
+    runs-on: ubuntu-latest
+    outputs:
+      pip_licenses_prod_report: ${{ steps.pip_licenses_prod_report.outcome }}
+      pip_licenses_prod_policy: ${{ steps.pip_licenses_prod_policy.outcome }}
+      pip_audit_prod: ${{ steps.pip_audit_prod.outcome }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Load tool versions
+        run: |
+          set -a
+          source tool-versions.env
+          set +a
+          {
+            echo "UV_VERSION=$UV_VERSION"
+            echo "PYTHON_VERSION=$PYTHON_VERSION"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependency audit tools
+        run: |
+          uv tool install pip-licenses
+          uv tool install pip-audit
+
+      - name: Prepare artifact directory
+        run: mkdir -p artifacts/python-prod
+
+      - name: Sync production dependencies only
+        run: uv sync --no-dev
+
+      - name: Export production Python license report
+        id: pip_licenses_prod_report
+        run: |
+          uv run pip-licenses \
+            --format=json \
+            --output-file artifacts/python-prod/pip-licenses-prod.json
+
+      - name: Enforce production Python license policy
+        id: pip_licenses_prod_policy
+        run: |
+          uv run pip-licenses --fail-on='GPL;AGPL;LGPL'
+
+      - name: Show production Python license findings (hint)
+        if: always()
+        run: |
+          uv run python scripts/python_licenses/license_findings_summary.py \
+            --title "Production Python license findings" \
+            --report-path artifacts/python-prod/pip-licenses-prod.json \
+            --policy-outcome "${{ steps.pip_licenses_prod_policy.outcome }}" \
+            --output "$GITHUB_STEP_SUMMARY"
+
+      - name: Audit production Python dependencies for vulnerabilities
+        id: pip_audit_prod
+        run: |
+          # Temporary exception:
+          # - CVE-2026-4539 affects Pygments <= 2.19.2
+          # - No fixed version is published yet
+          # - Revisit when upstream releases a patched version
+          uv run pip-audit \
+              --ignore-vuln CVE-2026-4539 \
+              --format=json \
+              --output=artifacts/python-prod/pip-audit-prod.json
+
+      - name: Show production pip-audit findings (hint)
+        if: always()
+        run: |
+          uv run python scripts/python_licenses/pip_audit_findings_summary.py \
+            --title "Production Python vulnerability findings" \
+            --report-path artifacts/python-prod/pip-audit-prod.json \
+            --output "$GITHUB_STEP_SUMMARY"
+
+      - name: Write production dependency summary
+        if: always()
+        run: |
+          {
+            echo "## Python dependency checks (production only)"
+            echo
+            echo "| Check | Result | Report |"
+            echo "|---|---|---|"
+            echo "| pip-licenses report | ${{ steps.pip_licenses_prod_report.outcome }} | \`artifacts/python-prod/pip-licenses-prod.json\` |"
+            echo "| pip-licenses policy (GPL/AGPL/LGPL fail) | ${{ steps.pip_licenses_prod_policy.outcome == 'success' && 'success' || 'failure (see hints below)' }} | \`artifacts/python-prod/pip-licenses-prod.json\` |"
+            echo "| pip-audit vulnerability audit | ${{ steps.pip_audit_prod.outcome == 'success' && 'success' || 'failure (see hints below)' }} | \`artifacts/python-prod/pip-audit-prod.json\` |"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload production dependency reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: security-reports-python-prod
+          path: artifacts/python-prod/
+
+  python-deps-all:
+    name: Python dependency checks (including dev)
+    runs-on: ubuntu-latest
+    outputs:
+      pip_licenses_all_report: ${{ steps.pip_licenses_all_report.outcome }}
+      pip_licenses_all_policy: ${{ steps.pip_licenses_all_policy.outcome }}
+      pip_audit_all: ${{ steps.pip_audit_all.outcome }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Load tool versions
+        run: |
+          set -a
+          source tool-versions.env
+          set +a
+          {
+            echo "UV_VERSION=$UV_VERSION"
+            echo "PYTHON_VERSION=$PYTHON_VERSION"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependency audit tools
+        run: |
+          uv tool install pip-licenses
+          uv tool install pip-audit
+
+      - name: Prepare artifact directory
+        run: mkdir -p artifacts/python-all
+
+      - name: Sync all dependencies including dev
+        run: uv sync
+
+      - name: Export all Python license report including dev dependencies
+        id: pip_licenses_all_report
+        run: |
+          uv run pip-licenses \
+            --format=json \
+            --output-file artifacts/python-all/pip-licenses-all.json
+
+      - name: Enforce all Python license policy including dev dependencies
+        id: pip_licenses_all_policy
+        run: |
+          uv run pip-licenses --fail-on='GPL;AGPL;LGPL'
+
+      - name: Show all Python license findings including dev dependencies (hint)
+        if: always()
+        run: |
+          uv run python scripts/python_licenses/license_findings_summary.py \
+            --title "All Python license findings (including dev)" \
+            --report-path artifacts/python-all/pip-licenses-all.json \
+            --policy-outcome "${{ steps.pip_licenses_all_policy.outcome }}" \
+            --dev-scope \
+            --output "$GITHUB_STEP_SUMMARY"
+
+      - name: Audit all Python dependencies for vulnerabilities including dev dependencies
+        id: pip_audit_all
+        run: |
+          # Temporary exception:
+          # - CVE-2026-4539 affects Pygments <= 2.19.2
+          # - No fixed version is published yet
+          # - Revisit when upstream releases a patched version
+          uv run pip-audit \
+            --ignore-vuln CVE-2026-4539 \
+            --format=json \
+            --output=artifacts/python-all/pip-audit-all.json
+
+      - name: Show all pip-audit findings including dev dependencies (hint)
+        if: always()
+        run: |
+          uv run python scripts/python_licenses/pip_audit_findings_summary.py \
+            --title "All Python vulnerability findings (including dev)" \
+            --report-path artifacts/python-all/pip-audit-all.json \
+            --dev-scope \
+            --output "$GITHUB_STEP_SUMMARY"
+
+      - name: Write all dependency summary
+        if: always()
+        run: |
+          {
+            echo "## Python dependency checks (including dev)"
+            echo
+            echo "| Check | Result | Report |"
+            echo "|---|---|---|"
+            echo "| pip-licenses report | ${{ steps.pip_licenses_all_report.outcome }} | \`artifacts/python-all/pip-licenses-all.json\` |"
+            echo "| pip-licenses policy (GPL/AGPL/LGPL fail) | ${{ steps.pip_licenses_all_policy.outcome == 'success' && 'success' || 'failure (see hints below)' }} | \`artifacts/python-all/pip-licenses-all.json\` |"
+            echo "| pip-audit vulnerability audit | ${{ steps.pip_audit_all.outcome == 'success' && 'success' || 'failure (see hints below)' }} | \`artifacts/python-all/pip-audit-all.json\` |"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload all dependency reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: security-reports-python-all
+          path: artifacts/python-all/
+
+  pr-comment:
+    name: Post PR comment
+    if: always() && github.event_name == 'pull_request'
+    needs:
+      - python-deps-prod
+      - python-deps-all
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Prepare PR comment body
+        run: |
+          mkdir -p artifacts
+
+          {
+            echo "## Python dependency security check"
+            echo
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| pip-licenses report (prod) | ${{ needs.python-deps-prod.outputs.pip_licenses_prod_report }} |"
+            echo "| pip-licenses policy (prod) | ${{ needs.python-deps-prod.outputs.pip_licenses_prod_policy == 'success' && 'success' || 'failure' }} |"
+            echo "| pip-audit (prod) | ${{ needs.python-deps-prod.outputs.pip_audit_prod == 'success' && 'success' || 'failure' }} |"
+            echo "| pip-licenses report (all) | ${{ needs.python-deps-all.outputs.pip_licenses_all_report }} |"
+            echo "| pip-licenses policy (all) | ${{ needs.python-deps-all.outputs.pip_licenses_all_policy == 'success' && 'success' || 'failure' }} |"
+            echo "| pip-audit (all) | ${{ needs.python-deps-all.outputs.pip_audit_all == 'success' && 'success' || 'failure' }} |"
+            echo
+            echo "### Notes"
+            echo "- Details are available in the workflow summary."
+            echo "- JSON reports are available from uploaded artifacts."
+          } > artifacts/pr-comment.md
+
+      - name: Post sticky PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: python-dependency-security-check
+          path: artifacts/pr-comment.md
