@@ -58,5 +58,9 @@ PR commentの方法もある
 
 ## 準備
 - Public repo
-- リポジトリの Settings → Pages を開く
-- Build and deployment の Source を GitHub Actions にする
+- Settings → Environments → github-pages
+- Delete environment
+- Settings → Pages
+- Build and deployment → Source = GitHub Actions のまま確認
+- develop へ push
+- workflow の environment: github-pages を見て、GitHub が github-pages を再作成
