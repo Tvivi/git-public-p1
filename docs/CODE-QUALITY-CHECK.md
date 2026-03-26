@@ -57,8 +57,6 @@ GitHub Pages で確認出来る
 PR commentの方法もある
 
 ## 準備
-下記でGitHub Actions からデプロイする（公開元を GitHub Actions にする）必要がある
-
-ただし、Pagesを使えるようにするには有料プランでない限りはプロジェクト自体を一般公開する必要がある
-
-> REPO/settings/pages
+- Public repo
+- リポジトリの Settings → Pages を開く
+- Build and deployment の Source を GitHub Actions にする
