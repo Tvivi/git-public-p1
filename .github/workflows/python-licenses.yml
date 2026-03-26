@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload production dependency reports
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: security-reports-python-prod
           path: artifacts/python-prod/
@@ -231,7 +231,7 @@ jobs:
 
       - name: Upload all dependency reports
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: security-reports-python-all
           path: artifacts/python-all/
