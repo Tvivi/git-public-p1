@@ -1,20 +1,50 @@
-# version: 2
+version: 2
 
-# updates:
-#   # TODO: uvに切り替え必要
-#   - package-ecosystem: "pip"
-#     directory: "/"
-#     schedule:
-#       interval: "weekly"
-#     open-pull-requests-limit: 5
-#     labels:
-#       - "dependencies"
-#       - "python"
+updates:
+  # Python 依存関係を uv / uv.lock ベースで更新する
+  - package-ecosystem: "uv"
 
-#   - package-ecosystem: "github-actions"
-#     directory: "/"
-#     schedule:
-#       interval: "weekly"
-#     labels:
-#       - "dependencies"
-#       - "github-actions"
+    # pyproject.toml / uv.lock があるディレクトリ
+    directory: "/"
+
+    schedule:
+      # 学習用・個人開発なら週1で十分
+      interval: "weekly"
+
+    # 同時にPRが増えすぎないよう抑制
+    open-pull-requests-limit: 5
+
+    # PR に付けるラベル
+    labels:
+      - "dependencies"
+      - "python"
+      - "uv"
+
+    # 現在は本番依存がなく dev ツール中心なので、まとめて上げたい場合はグループ化すると見やすい
+    groups:
+      python-dev-tools:
+        dependency-type: "development"
+        patterns:
+          - "*"
+
+    # PRタイトル/コミットメッセージを見やすくする任意設定
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore(dev)"
+
+  # GitHub Actions も一緒に自動更新する
+  - package-ecosystem: "github-actions"
+
+    # .github/workflows 配下を見に行く
+    directory: "/"
+
+    schedule:
+      interval: "weekly"
+
+    open-pull-requests-limit: 3
+
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+    # actions は1本ずつのほうが失敗原因を追いやすいので、まずは group 化しない構成を推奨
