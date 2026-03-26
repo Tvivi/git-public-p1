@@ -150,7 +150,8 @@ GitHub の依存関係管理機能群。下記3つで構成される
 - Dependabot security updates: 修正版へ更新する PR の自動作成
 - Dependabot version updates: 脆弱性有無に関係なく通常更新の PRを`dependabot.yml`に従って定期的に作る
 
-検出だけでなく、修正PR作成まで面倒を見てくれるのが強み
+検出だけでなく、GitHub Actionsの`actions/checkout@v4`のバージョンが古いなども指摘して自動で修正PR作成まで面倒を見てくれるのが強み
+
 
 ### GitHubでの設定
 
