@@ -1,41 +1,59 @@
-# # Default setupでは本ymlは適用されないので、使いたい場合は Advanced setup へ切り替えが必要
-# name: CodeQL
+# GitHub の Code Scanning で使う CodeQL ワークフロー
+# 注意:
+# - これは「Default setup」ではなく「Advanced setup」で使う想定
+# - 利用するには GitHub 側で CodeQL を Advanced setup に切り替える必要がある
 
-# on:
-#   push:
-#     branches: ["main"]
-#   pull_request:
-#     branches: ["main"]
-#   schedule:
-#     # ｓｓ
-#     - cron: "30 18 * * 0"
+name: CodeQL
 
-# permissions:
-#   contents: read
-#   actions: read
-#   security-events: write
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
 
-# jobs:
-#   analyze:
-#     name: Analyze (Python)
-#     runs-on: ubuntu-latest
+  # 定期実行
+  # "30 18 * * 0" = 毎週日曜 18:30 UTC（日本時間では月曜 03:30 JST）
+  schedule:
+    - cron: "30 18 * * 0"
 
-#     strategy:
-#       fail-fast: false
-#       matrix:
-#         language: ["python"]
+permissions:
+  # リポジトリ内容の読み取り
+  contents: read
+  # Actions 実行情報の読み取り
+  actions: read
+  # Code Scanning 結果（SARIF）を書き込むために必要
+  security-events: write
 
-#     steps:
-#       - name: Checkout
-#         uses: actions/checkout@v4
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
 
-#       - name: Initialize CodeQL
-#         uses: github/codeql-action/init@v3
-#         with:
-#           languages: ${{ matrix.language }}
+    strategy:
+      # matrix のどれか1つが失敗しても他を継続
+      # 今は python 1言語だけなので影響は小さいが、将来多言語化しても安全
+      fail-fast: false
 
-#       - name: Autobuild
-#         uses: github/codeql-action/autobuild@v3
+      matrix:
+        # 解析対象言語。将来的に javascript, java などを追加する場合はここを増やす
+        language: ["python"]
 
-#       - name: Perform CodeQL Analysis
-#         uses: github/codeql-action/analyze@v3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ここで対象言語に応じた解析準備を行う
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          # matrix で指定した言語を使う
+          languages: ${{ matrix.language }}
+
+      # ビルドが必要な言語向けの自動ビルド
+      # Python では実質何もしないことも多いが、テンプレートとして入れておくと他言語追加時に流用しやすい
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      # CodeQL 解析を実行し、結果を GitHub Code Scanning に送信
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
