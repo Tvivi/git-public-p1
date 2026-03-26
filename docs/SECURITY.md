@@ -196,6 +196,15 @@ dependency-review-config.yml
 
 単純な lint(Ruff) では見つからない危険パターンも検知できる
 
+### 誤検知の抑制
+下記２つの方法が考えられる
+
+- suppression comment(`# codeql[query-id]`)を使う
+    query-idはcode-scanningページののRule IDに記載がある
+- GitHub の Security タブでこの alert を Dismiss → false positive にする
+    false positive にした履歴は Closedタブで見れる
+- ファイルを CodeQL 対象から外す(`codeql.yml`限定)
+
 ### GitHubでの設定
 
 - リポジトリが public か / private なら GitHub Code Security があるかを確認。

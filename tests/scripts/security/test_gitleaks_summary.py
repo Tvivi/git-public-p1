@@ -57,7 +57,7 @@ def test_build_hint_no_leaks() -> None:
 
 
 def test_build_hint_with_findings() -> None:
-    """findingsありなら件数と代表的なルール・ファイルが出る。"""
+    """findingsありなら件数と代表的なルールが出る。"""
     findings = [
         {"RuleID": "key", "File": "a.py"},
         {"RuleID": "key", "File": "a.py"},
@@ -67,7 +67,7 @@ def test_build_hint_with_findings() -> None:
 
     assert "3 findings" in hint
     assert "top rule: key (2)" in hint
-    assert "top file: a.py (2)" in hint
+    assert "top file:" not in hint
 
 
 def test_write_summary_no_findings(tmp_path: Path) -> None:

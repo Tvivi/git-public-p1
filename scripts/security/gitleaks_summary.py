@@ -63,21 +63,16 @@ def build_hint(findings: list[dict[str, Any]], scan_exit_code: int) -> str:
         return "No leaks found"
 
     rules: Counter[str] = Counter()
-    paths: Counter[str] = Counter()
 
     for finding in findings:
         rule = finding.get("RuleID") or finding.get("Description") or "unknown rule"
-        file_path = finding.get("File") or "unknown file"
         rules[str(rule)] += 1
-        paths[str(file_path)] += 1
 
     top_rule, top_rule_count = rules.most_common(1)[0]
-    top_path, top_path_count = paths.most_common(1)[0]
 
     return (
         f"{len(findings)} findings, "
-        f"top rule: {top_rule} ({top_rule_count}), "
-        f"top file: {top_path} ({top_path_count})"
+        f"top rule: {top_rule} ({top_rule_count})"
     )
 
 
