@@ -108,7 +108,13 @@ def main() -> int:
         trivy_fs_summary_path=Path(args.trivy_fs_summary),
     )
 
-    Path(args.output).write_text(content, encoding="utf-8")
+    output_path = Path(args.output)
+
+    # codeql[py/clear-text-storage-sensitive-data]
+    # 誤検知: このファイルが書き出すのは固定の索引文とレポートのファイル名だけです。
+    # 生の検出結果、secret 本文、スキャン出力は読み込まず、保存もしません。
+    output_path.write_text(content, encoding="utf-8")
+
     return 0
 
 
