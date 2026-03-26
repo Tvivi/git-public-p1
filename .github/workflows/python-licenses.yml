@@ -10,6 +10,22 @@ permissions:
   pull-requests: write
 
 jobs:
+  dependency-review:
+    name: Dependency Review (PR diff)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          config-file: .github/dependency-review-config.yml
+
   python-deps-prod:
     name: Python dependency checks (production only)
     runs-on: ubuntu-latest
@@ -224,6 +240,7 @@ jobs:
     name: Post PR comment
     if: always() && github.event_name == 'pull_request'
     needs:
+      - dependency-review
       - python-deps-prod
       - python-deps-all
     runs-on: ubuntu-latest
@@ -238,6 +255,7 @@ jobs:
             echo
             echo "| Check | Result |"
             echo "|---|---|"
+            echo "| Dependency Review (PR diff) | ${{ needs.dependency-review.result == 'success' && 'success' || 'failure' }} |"
             echo "| pip-licenses report (prod) | ${{ needs.python-deps-prod.outputs.pip_licenses_prod_report }} |"
             echo "| pip-licenses policy (prod) | ${{ needs.python-deps-prod.outputs.pip_licenses_prod_policy == 'success' && 'success' || 'failure' }} |"
             echo "| pip-audit (prod) | ${{ needs.python-deps-prod.outputs.pip_audit_prod == 'success' && 'success' || 'failure' }} |"
@@ -246,6 +264,8 @@ jobs:
             echo "| pip-audit (all) | ${{ needs.python-deps-all.outputs.pip_audit_all == 'success' && 'success' || 'failure' }} |"
             echo
             echo "### Notes"
+            echo "- Dependency Review checks only the dependency changes introduced by this PR."
+            echo "- pip-audit checks the resolved Python environment."
             echo "- Details are available in the workflow summary."
             echo "- JSON reports are available from uploaded artifacts."
           } > artifacts/pr-comment.md

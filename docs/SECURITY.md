@@ -173,9 +173,6 @@ pip-audit は 現在のPython依存を監査するが、Dependency Review は PR
 
 公開前やマージ前のゲートとして有効。
 
-Dependency Reviewはpython_licenses-check.ymlに取り込む予定。
-dependency-review-config.yml
-
 ### GitHubでの設定
 
 1. リポジトリ種別を確認
@@ -185,7 +182,7 @@ dependency-review-config.yml
 3. GitHub Actions を有効化
     workflow を動かせるようにする。
 4. Workflow を追加
-    `.github/workflows/dependency-review.yml` を置く。
+    本プロジェクトでは`.github/workflows/python_licenses-check.yml` に追記する形。
 5. Branch protection / Ruleset で必須化
     PR の merge 前ゲートとして使う。
 

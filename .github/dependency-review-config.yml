@@ -1,9 +1,10 @@
-# # low / moderate / high / critical
-# fail-on-severity: moderate
-# # runtime依存を重視。必要なら development も追加
-# fail-on-scopes:
-#   - runtime
-# # allow-licenses と deny-licenses は同時指定不可
-# deny-licenses:
-#   - GPL-2.0
-#   - GPL-3.0
+# low / moderate / high / critical
+fail-on-severity: moderate
+# 本番に入るruntime依存を重視。必要なら development も追加
+fail-on-scopes:
+  - runtime
+  # - development
+# allow-licenses と deny-licenses は同時指定不可
+deny-licenses:
+  - GPL-2.0
+  - GPL-3.0
