@@ -2,9 +2,9 @@
 build_security_report_index.py のユニットテスト。
 
 テスト対象：
-- テキスト読み込み
+- セクション生成
 - 索引Markdown生成
-- 安全なプレビュー生成
+- summary 本文を読まずに存在確認だけすること
 """
 
 from __future__ import annotations
@@ -13,47 +13,51 @@ from pathlib import Path
 
 from scripts.security.build_security_report_index import (
     build_index,
-    build_section_preview,
-    load_text,
+    build_section,
 )
 
 
-def test_load_text_missing_file(tmp_path: Path) -> None:
-    """存在しないファイルは Missing 表記になる。"""
-    text = load_text(tmp_path / "missing.md")
-    assert "Missing file" in text
+def test_build_section_with_existing_file(tmp_path: Path) -> None:
+    """存在する summary はファイル名だけを表示する。"""
+    summary = tmp_path / "detect-summary.md"
+    summary.write_text("Potential secret in a.py", encoding="utf-8")
+
+    text = build_section("detect-secrets", summary)
+
+    assert "## detect-secrets" in text
+    assert "detect-summary.md" in text
+    assert "Detailed findings are intentionally not embedded" in text
+    assert "Potential secret in a.py" not in text
 
 
-def test_build_section_preview_skips_headings_and_code_blocks() -> None:
-    """見出しやコードブロックはプレビューに含めない。"""
-    preview = build_section_preview(
-        "\n".join(
-            [
-                "### heading",
-                "",
-                "- Total findings: **2**",
-                "```text",
-                "secret-like output",
-                "```",
-                "- Hint: review baseline",
-                "",
-            ]
-        )
-    )
+def test_build_section_with_missing_file(tmp_path: Path) -> None:
+    """存在しない summary は missing 表記になる。"""
+    summary = tmp_path / "missing-summary.md"
 
-    assert "- Total findings: **2**" in preview
-    assert "- - Hint: review baseline" in preview
-    assert "secret-like output" not in preview
-    assert "### heading" not in preview
+    text = build_section("Gitleaks", summary)
+
+    assert "## Gitleaks" in text
+    assert "Summary file is missing" in text
+    assert "missing-summary.md" in text
 
 
-def test_build_index_contains_all_sections() -> None:
+def test_build_index_contains_all_sections(tmp_path: Path) -> None:
     """すべてのセクション見出しが含まれる。"""
+    detect = tmp_path / "detect.md"
+    gitleaks = tmp_path / "gitleaks.md"
+    trivy_config = tmp_path / "trivy-config.md"
+    trivy_fs = tmp_path / "trivy-fs.md"
+
+    detect.write_text("secret like text", encoding="utf-8")
+    gitleaks.write_text("another detail", encoding="utf-8")
+    trivy_config.write_text("config detail", encoding="utf-8")
+    trivy_fs.write_text("fs detail", encoding="utf-8")
+
     text = build_index(
-        detect_summary_md="detect",  # pragma: allowlist secret
-        gitleaks_summary="gitleaks",
-        trivy_config_summary="config",
-        trivy_fs_summary="fs",
+        detect_summary_path=detect,
+        gitleaks_summary_path=gitleaks,
+        trivy_config_summary_path=trivy_config,
+        trivy_fs_summary_path=trivy_fs,
     )
 
     assert "# Repository Security Reports" in text
@@ -63,13 +67,25 @@ def test_build_index_contains_all_sections() -> None:
     assert "## Trivy fs" in text
 
 
-def test_build_index_does_not_embed_code_block_content() -> None:
-    """コードブロック内の内容は index に再掲しない。"""
+def test_build_index_does_not_embed_summary_contents(tmp_path: Path) -> None:
+    """summary に危険そうな文字列があっても index へ再掲しない。"""
+    detect = tmp_path / "detect.md"
+    gitleaks = tmp_path / "gitleaks.md"
+    trivy_config = tmp_path / "trivy-config.md"
+    trivy_fs = tmp_path / "trivy-fs.md"
+
+    detect.write_text("Potential secret in a.py", encoding="utf-8")
+    gitleaks.write_text("commit: abcdef", encoding="utf-8")
+    trivy_config.write_text("HIGH finding", encoding="utf-8")
+    trivy_fs.write_text("generic-api-key", encoding="utf-8")
+
     text = build_index(
-        detect_summary_md="```text\nPotential secret in a.py\n```",
-        gitleaks_summary="ok",
-        trivy_config_summary="ok",
-        trivy_fs_summary="ok",
+        detect_summary_path=detect,
+        gitleaks_summary_path=gitleaks,
+        trivy_config_summary_path=trivy_config,
+        trivy_fs_summary_path=trivy_fs,
     )
 
     assert "Potential secret in a.py" not in text
+    assert "commit: abcdef" not in text
+    assert "generic-api-key" not in text
