@@ -70,8 +70,8 @@ def test_build_hint_no_new_secrets() -> None:
     assert hint == "No new secrets"
 
 
-def test_build_hint_with_hook_output() -> None:
-    """hook失敗時は先頭行を含むヒントになる。"""
+def test_build_hint_with_hook_output_does_not_expose_raw_text() -> None:
+    """hook失敗時も生の出力はヒントに含めない。"""
     hint = build_hint(
         report_findings=2,
         scan_exit_code=0,
@@ -79,7 +79,8 @@ def test_build_hint_with_hook_output() -> None:
         hook_output="Potential secret in README.md\nmore lines",
     )
     assert "Potential new secrets detected" in hint
-    assert "Potential secret in README.md" in hint
+    assert "2 findings in working tree scan" in hint
+    assert "Potential secret in README.md" not in hint
 
 
 def test_write_summary_success(tmp_path: Path) -> None:
@@ -97,8 +98,8 @@ def test_write_summary_success(tmp_path: Path) -> None:
     assert "No new secrets compared with `.secrets.baseline`" in text
 
 
-def test_write_summary_failure(tmp_path: Path) -> None:
-    """hook失敗時はhook出力とヒントが出力される。"""
+def test_write_summary_failure_omits_hook_output(tmp_path: Path) -> None:
+    """hook失敗時も生のhook出力はサマリーに書かれない。"""
     out = tmp_path / "summary.md"
     write_summary(
         path=out,
@@ -109,8 +110,10 @@ def test_write_summary_failure(tmp_path: Path) -> None:
     )
 
     text = out.read_text(encoding="utf-8")
-    assert "Hook output" in text
-    assert "Potential secret in README.md" in text
+    assert "Potential new secrets detected" in text
+    assert "Raw hook output is intentionally omitted" in text
+    assert "Potential secret in README.md" not in text
+    assert "Hook output" not in text
 
 
 def test_main_success(
@@ -194,4 +197,4 @@ def test_main_failure(
     captured = capsys.readouterr()
 
     assert "policy_exit_code=1" in captured.out
-    assert "summary_hint=Potential new secrets detected" in captured.out
+    assert "summary_hint=Potential new secrets detected (1 findings in working tree scan)" in captured.out

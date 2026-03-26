@@ -181,7 +181,7 @@ dependency-review-config.yml
 1. リポジトリ種別を確認
     public ならそのまま、private なら GitHub Code Security か GHAS を有効化。
 2. Dependency graph を有効化
-    依存関係が GitHub に認識される状態にする。
+    `Settings → Advanced Security`から依存関係が GitHub に認識される状態にする。
 3. GitHub Actions を有効化
     workflow を動かせるようにする。
 4. Workflow を追加

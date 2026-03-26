@@ -3,8 +3,8 @@
 
 このスクリプトは以下を担う：
 
-- detect-secrets / Gitleaks / Trivy の各サマリーを1つに束ねる
-- GitHub Actions artifact から Pages 公開へ移行しやすい入口ページを作る
+- detect-secrets / Gitleaks / Trivy の各サマリーの入口を1つにまとめる
+- 公開向け index に生の検出詳細を埋め込まず、要約だけを載せる
 """
 
 from __future__ import annotations
@@ -31,6 +31,50 @@ def load_text(path: Path) -> str:
         return f"_Missing file: `{path}`_\n"
 
     return path.read_text(encoding="utf-8").strip() + "\n"
+
+
+def build_section_preview(summary_text: str) -> str:
+    """
+    サマリー本文から安全な短いプレビューだけを抽出する。
+
+    生の findings や code block を再掲しないため、以下を除外する：
+    - コードブロック
+    - 見出し
+    - 空行
+
+    Parameters
+    ----------
+    summary_text : str
+        元のサマリー本文
+
+    Returns
+    -------
+    str
+        index 用の短いプレビューMarkdown
+    """
+    lines: list[str] = []
+    in_code_block = False
+
+    for raw_line in summary_text.splitlines():
+        line = raw_line.strip()
+
+        if raw_line.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+
+        if in_code_block or not line:
+            continue
+
+        if line.startswith("#"):
+            continue
+
+        lines.append(line)
+
+    if not lines:
+        return "- Summary available in artifact"
+
+    preview_lines = lines[:3]
+    return "\n".join(f"- {line}" for line in preview_lines)
 
 
 def build_index(
@@ -63,22 +107,23 @@ def build_index(
             "# Repository Security Reports",
             "",
             "このページは CI で生成されたセキュリティレポートの索引です。",
+            "公開向け index では詳細な検出内容を再掲せず、要約のみを表示します。",
             "",
             "## detect-secrets",
             "",
-            detect_summary_md.strip(),
+            build_section_preview(detect_summary_md),
             "",
             "## Gitleaks",
             "",
-            gitleaks_summary.strip(),
+            build_section_preview(gitleaks_summary),
             "",
             "## Trivy config",
             "",
-            trivy_config_summary.strip(),
+            build_section_preview(trivy_config_summary),
             "",
             "## Trivy fs",
             "",
-            trivy_fs_summary.strip(),
+            build_section_preview(trivy_fs_summary),
             "",
         ]
     ) + "\n"

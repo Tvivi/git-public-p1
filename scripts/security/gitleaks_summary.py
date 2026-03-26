@@ -89,6 +89,9 @@ def write_summary(
     """
     Markdown形式のサマリーファイルを生成する。
 
+    生の finding 詳細や commit / author は書き出さず、
+    集計情報だけを公開向け summary に残す。
+
     Parameters
     ----------
     path : Path
@@ -126,20 +129,9 @@ def write_summary(
         lines.append(f"- {rule}: {count}")
     lines.append("")
 
-    lines.append("#### Example findings")
-    for finding in findings[:5]:
-        rule = finding.get("RuleID") or finding.get("Description") or "unknown rule"
-        file_path = finding.get("File") or "unknown file"
-        start_line = finding.get("StartLine")
-        commit = finding.get("Commit") or "-"
-        author = finding.get("Author") or "-"
-
-        line_info = f" [line: {start_line}]" if start_line else ""
-        lines.append(
-            f"- [{rule}] in `{file_path}`{line_info} | "
-            f"commit: `{commit}` | author: `{author}`"
-        )
-
+    lines.append("#### Result")
+    lines.append("- Detailed finding locations are intentionally omitted from this summary")
+    lines.append("- Review the raw CI artifact or protected scan output for exact locations")
     lines.append("")
     lines.append("#### Hint")
     lines.append("- If this is a real secret: revoke or rotate it first")

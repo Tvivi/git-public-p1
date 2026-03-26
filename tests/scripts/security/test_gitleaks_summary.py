@@ -79,8 +79,8 @@ def test_write_summary_no_findings(tmp_path: Path) -> None:
     assert "No leaks found" in text
 
 
-def test_write_summary_with_findings(tmp_path: Path) -> None:
-    """findingsありの場合は詳細サマリーが出力される。"""
+def test_write_summary_with_findings_omits_raw_details(tmp_path: Path) -> None:
+    """findingsありでも詳細な場所情報は出力しない。"""
     out = tmp_path / "summary.md"
     findings = [
         {"RuleID": "key", "File": "a.py", "StartLine": 1},
@@ -91,7 +91,9 @@ def test_write_summary_with_findings(tmp_path: Path) -> None:
     text = out.read_text(encoding="utf-8")
     assert "Total findings: **2**" in text
     assert "Top matched rules" in text
-    assert "[key] in `a.py` [line: 1]" in text
+    assert "Detailed finding locations are intentionally omitted" in text
+    assert "`a.py`" not in text
+    assert "[line: 1]" not in text
 
 
 def test_main_with_findings_sets_policy_failure(

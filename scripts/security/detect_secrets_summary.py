@@ -94,6 +94,8 @@ def build_hint(
     """
     サマリー表向けの短いヒントを生成する。
 
+    生の hook 出力は含めず、安全な固定文ベースで返す。
+
     Parameters
     ----------
     report_findings : int
@@ -103,23 +105,20 @@ def build_hint(
     hook_exit_code : int
         detect-secrets-hook の終了コード
     hook_output : str
-        hookの出力内容
+        hookの出力内容。安全性のためヒント文字列には埋め込まない。
 
     Returns
     -------
     str
         短いヒント文字列
     """
+    del hook_output
+
     if scan_exit_code != 0:
         return "scan error"
 
     if hook_exit_code == 0:
         return "No new secrets"
-
-    first_line = hook_output.splitlines()[0].strip() if hook_output else ""
-    if first_line:
-        short = first_line[:120]
-        return f"Potential new secrets detected: {short}"
 
     return (
         "Potential new secrets detected "
@@ -137,6 +136,8 @@ def write_summary(
     """
     Markdown形式のサマリーファイルを生成する。
 
+    生の hook 出力は保存せず、概要と対処方針のみを出力する。
+
     Parameters
     ----------
     path : Path
@@ -148,8 +149,10 @@ def write_summary(
     hook_exit_code : int
         detect-secrets-hook の終了コード
     hook_output : str
-        hookの出力内容
+        hookの出力内容。安全性のためMarkdownへは直接書き出さない。
     """
+    del hook_output
+
     lines: list[str] = ["### 🔐 detect-secrets findings", ""]
 
     if scan_exit_code != 0:
@@ -174,13 +177,12 @@ def write_summary(
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return
 
-    lines.append("#### Hook output")
-    lines.append("")
-    lines.append("```text")
-    lines.append(hook_output or "(no output)")
-    lines.append("```")
+    lines.append("#### Result")
+    lines.append("- Potential new secrets detected")
+    lines.append("- Raw hook output is intentionally omitted from this summary")
     lines.append("")
     lines.append("#### Hint")
+    lines.append("- Review the CI log or local command output for exact locations")
     lines.append("- Remove the secret from tracked files if it is real")
     lines.append("- Rotate or revoke the credential before rewriting history")
     lines.append("- If this is a false positive, audit `.secrets.baseline` carefully")
