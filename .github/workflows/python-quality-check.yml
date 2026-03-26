@@ -337,10 +337,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Pages artifact
-        if: >
-          always() &&
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/main'
+        if: success() && github.event_name == 'push'
         uses: actions/upload-pages-artifact@v3
         with:
           path: coverage/html
@@ -358,7 +355,7 @@ jobs:
           exit "$EXIT_CODE"
 
   deploy-coverage-pages:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-latest
     environment:
