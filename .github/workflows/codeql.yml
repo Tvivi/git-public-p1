@@ -44,7 +44,7 @@ jobs:
 
       # ここで対象言語に応じた解析準備を行う
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           # matrix で指定した言語を使う
           languages: ${{ matrix.language }}
@@ -52,8 +52,8 @@ jobs:
       # ビルドが必要な言語向けの自動ビルド
       # Python では実質何もしないことも多いが、テンプレートとして入れておくと他言語追加時に流用しやすい
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       # CodeQL 解析を実行し、結果を GitHub Code Scanning に送信
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
