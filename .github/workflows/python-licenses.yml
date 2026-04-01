@@ -271,7 +271,7 @@ jobs:
           } > artifacts/pr-comment.md
 
       - name: Post sticky PR comment
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: python-dependency-security-check
           path: artifacts/pr-comment.md
